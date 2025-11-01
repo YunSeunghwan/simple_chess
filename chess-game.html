@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チェスゲーム</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .info {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0;
+            width: 100%;
+            max-width: 480px;
+            margin: 0 auto;
+            border: 3px solid #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .square {
+            aspect-ratio: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 40px;
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .square.light {
+            background: #f0d9b5;
+        }
+        .square.dark {
+            background: #b58863;
+        }
+        .square.selected {
+            background: #7fb3d5 !important;
+            box-shadow: inset 0 0 0 3px #2980b9;
+        }
+        .square.valid-move {
+            position: relative;
+        }
+        .square.valid-move::after {
+            content: '';
+            position: absolute;
+            width: 30%;
+            height: 30%;
+            background: rgba(0, 255, 0, 0.5);
+            border-radius: 50%;
+        }
+        .square.valid-move.has-piece::after {
+            width: 90%;
+            height: 90%;
+            background: none;
+            border: 4px solid rgba(255, 0, 0, 0.6);
+            border-radius: 50%;
+        }
+        .square:hover {
+            opacity: 0.8;
+        }
+        .status {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 16px;
+            color: #666;
+            min-height: 24px;
+        }
+        .game-over {
+            background: #ff6b6b;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>♟️ チェス ♟️</h1>
+        <div class="controls">
+            <button onclick="startGame('player')">プレイヤー対戦</button>
+            <button onclick="startGame('computer')">コンピューター対戦</button>
+            <button onclick="resetGame()">リセット</button>
+        </div>
+        <div class="info" id="info">ゲームモードを選択してください</div>
+        <div class="board" id="board"></div>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const pieces = {
+            'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+            'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+        };
+
+        let board = [];
+        let selectedSquare = null;
+        let currentPlayer = 'white';
+        let gameMode = null;
+        let gameOver = false;
+
+        function initBoard() {
+            board = [
+                ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+                ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+                ['.', '.', '.', '.', '.', '.', '.', '.'],
+                ['.', '.', '.', '.', '.', '.', '.', '.'],
+                ['.', '.', '.', '.', '.', '.', '.', '.'],
+                ['.', '.', '.', '.', '.', '.', '.', '.'],
+                ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+                ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
+            ];
+        }
+
+        function startGame(mode) {
+            gameMode = mode;
+            gameOver = false;
+            currentPlayer = 'white';
+            selectedSquare = null;
+            initBoard();
+            renderBoard();
+            updateInfo();
+        }
+
+        function resetGame() {
+            gameMode = null;
+            gameOver = false;
+            currentPlayer = 'white';
+            selectedSquare = null;
+            initBoard();
+            renderBoard();
+            document.getElementById('info').textContent = 'ゲームモードを選択してください';
+            document.getElementById('status').textContent = '';
+        }
+
+        function renderBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = 'square';
+                    square.className += (row + col) % 2 === 0 ? ' light' : ' dark';
+                    square.dataset.row = row;
+                    square.dataset.col = col;
+                    
+                    const piece = board[row][col];
+                    if (piece !== '.') {
+                        square.textContent = pieces[piece];
+                        square.classList.add('has-piece');
+                    }
+                    
+                    square.onclick = () => handleSquareClick(row, col);
+                    boardEl.appendChild(square);
+                }
+            }
+        }
+
+        function handleSquareClick(row, col) {
+            if (gameOver || !gameMode) return;
+            if (gameMode === 'computer' && currentPlayer === 'black') return;
+
+            const piece = board[row][col];
+            
+            if (selectedSquare) {
+                const validMoves = getValidMoves(selectedSquare.row, selectedSquare.col);
+                const isValidMove = validMoves.some(m => m.row === row && m.col === col);
+                
+                if (isValidMove) {
+                    movePiece(selectedSquare.row, selectedSquare.col, row, col);
+                    selectedSquare = null;
+                    renderBoard();
+                    
+                    if (checkGameOver()) {
+                        return;
+                    }
+                    
+                    currentPlayer = currentPlayer === 'white' ? 'black' : 'white';
+                    updateInfo();
+                    
+                    if (gameMode === 'computer' && currentPlayer === 'black') {
+                        setTimeout(computerMove, 500);
+                    }
+                } else if (piece !== '.' && isPlayerPiece(piece)) {
+                    selectedSquare = { row, col };
+                    highlightValidMoves(row, col);
+                } else {
+                    selectedSquare = null;
+                    renderBoard();
+                }
+            } else if (piece !== '.' && isPlayerPiece(piece)) {
+                selectedSquare = { row, col };
+                highlightValidMoves(row, col);
+            }
+        }
+
+        function isPlayerPiece(piece) {
+            if (currentPlayer === 'white') {
+                return piece === piece.toUpperCase();
+            } else {
+                return piece === piece.toLowerCase();
+            }
+        }
+
+        function highlightValidMoves(row, col) {
+            renderBoard();
+            const squares = document.querySelectorAll('.square');
+            squares[row * 8 + col].classList.add('selected');
+            
+            const validMoves = getValidMoves(row, col);
+            validMoves.forEach(move => {
+                const square = squares[move.row * 8 + move.col];
+                square.classList.add('valid-move');
+            });
+        }
+
+        function getValidMoves(row, col) {
+            const piece = board[row][col].toLowerCase();
+            let moves = [];
+            
+            switch(piece) {
+                case 'p': moves = getPawnMoves(row, col); break;
+                case 'r': moves = getRookMoves(row, col); break;
+                case 'n': moves = getKnightMoves(row, col); break;
+                case 'b': moves = getBishopMoves(row, col); break;
+                case 'q': moves = getQueenMoves(row, col); break;
+                case 'k': moves = getKingMoves(row, col); break;
+            }
+            
+            return moves.filter(m => m.row >= 0 && m.row < 8 && m.col >= 0 && m.col < 8);
+        }
+
+        function getPawnMoves(row, col) {
+            const moves = [];
+            const piece = board[row][col];
+            const direction = piece === piece.toUpperCase() ? -1 : 1;
+            const startRow = piece === piece.toUpperCase() ? 6 : 1;
+            
+            if (board[row + direction] && board[row + direction][col] === '.') {
+                moves.push({row: row + direction, col});
+                if (row === startRow && board[row + 2 * direction][col] === '.') {
+                    moves.push({row: row + 2 * direction, col});
+                }
+            }
+            
+            [col - 1, col + 1].forEach(c => {
+                if (board[row + direction] && board[row + direction][c] && 
+                    board[row + direction][c] !== '.' && 
+                    isOpponentPiece(board[row + direction][c], piece)) {
+                    moves.push({row: row + direction, col: c});
+                }
+            });
+            
+            return moves;
+        }
+
+        function getRookMoves(row, col) {
+            return getSlidingMoves(row, col, [[1,0],[-1,0],[0,1],[0,-1]]);
+        }
+
+        function getBishopMoves(row, col) {
+            return getSlidingMoves(row, col, [[1,1],[1,-1],[-1,1],[-1,-1]]);
+        }
+
+        function getQueenMoves(row, col) {
+            return getSlidingMoves(row, col, [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]);
+        }
+
+        function getSlidingMoves(row, col, directions) {
+            const moves = [];
+            const piece = board[row][col];
+            
+            directions.forEach(([dr, dc]) => {
+                let r = row + dr, c = col + dc;
+                while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                    if (board[r][c] === '.') {
+                        moves.push({row: r, col: c});
+                    } else {
+                        if (isOpponentPiece(board[r][c], piece)) {
+                            moves.push({row: r, col: c});
+                        }
+                        break;
+                    }
+                    r += dr;
+                    c += dc;
+                }
+            });
+            
+            return moves;
+        }
+
+        function getKnightMoves(row, col) {
+            const moves = [];
+            const piece = board[row][col];
+            const offsets = [[2,1],[2,-1],[-2,1],[-2,-1],[1,2],[1,-2],[-1,2],[-1,-2]];
+            
+            offsets.forEach(([dr, dc]) => {
+                const r = row + dr, c = col + dc;
+                if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                    if (board[r][c] === '.' || isOpponentPiece(board[r][c], piece)) {
+                        moves.push({row: r, col: c});
+                    }
+                }
+            });
+            
+            return moves;
+        }
+
+        function getKingMoves(row, col) {
+            const moves = [];
+            const piece = board[row][col];
+            
+            for (let dr = -1; dr <= 1; dr++) {
+                for (let dc = -1; dc <= 1; dc++) {
+                    if (dr === 0 && dc === 0) continue;
+                    const r = row + dr, c = col + dc;
+                    if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+                        if (board[r][c] === '.' || isOpponentPiece(board[r][c], piece)) {
+                            moves.push({row: r, col: c});
+                        }
+                    }
+                }
+            }
+            
+            return moves;
+        }
+
+        function isOpponentPiece(piece1, piece2) {
+            return (piece1 === piece1.toUpperCase()) !== (piece2 === piece2.toUpperCase());
+        }
+
+        function movePiece(fromRow, fromCol, toRow, toCol) {
+            board[toRow][toCol] = board[fromRow][fromCol];
+            board[fromRow][fromCol] = '.';
+        }
+
+        function computerMove() {
+            const allMoves = [];
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const piece = board[row][col];
+                    if (piece !== '.' && piece === piece.toLowerCase()) {
+                        const moves = getValidMoves(row, col);
+                        moves.forEach(move => {
+                            allMoves.push({from: {row, col}, to: move});
+                        });
+                    }
+                }
+            }
+            
+            if (allMoves.length > 0) {
+                const move = allMoves[Math.floor(Math.random() * allMoves.length)];
+                movePiece(move.from.row, move.from.col, move.to.row, move.to.col);
+                renderBoard();
+                
+                if (checkGameOver()) {
+                    return;
+                }
+                
+                currentPlayer = 'white';
+                updateInfo();
+            }
+        }
+
+        function checkGameOver() {
+            let whiteKing = false, blackKing = false;
+            
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    if (board[row][col] === 'K') whiteKing = true;
+                    if (board[row][col] === 'k') blackKing = true;
+                }
+            }
+            
+            if (!whiteKing || !blackKing) {
+                gameOver = true;
+                const winner = whiteKing ? '白' : '黒';
+                document.getElementById('status').innerHTML = `<div class="game-over">ゲーム終了！ ${winner}の勝利！</div>`;
+                return true;
+            }
+            return false;
+        }
+
+        function updateInfo() {
+            const player = currentPlayer === 'white' ? '白' : '黒';
+            document.getElementById('info').textContent = `現在のターン: ${player}`;
+        }
+
+        initBoard();
+        renderBoard();
+    </script>
+</body>
+</html>
